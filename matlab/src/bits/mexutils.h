@@ -4,7 +4,7 @@
  **/
 
 /*
-Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+Copyright (C) 2007-15 Andrea Vedaldi and Brian Fulkerson.
 All rights reserved.
 
 This file is part of the VLFeat library and is made available under
@@ -24,6 +24,12 @@ the terms of the BSD license (see the COPYING file).
 #ifdef _MSC_VER
 #define snprintf _snprintf
 #define vsnprintf _vsnprintf
+#if _MSC_VER < 1800
+// Add some missing functions from C99
+#define isnan(x) _isnan(x)
+#define isinf(x) (!_finite(x))
+#define roundf(x) (float)(int)(x+0.5f)
+#endif
 #endif
 
 typedef mwSize vl_size ;
@@ -57,6 +63,7 @@ case vlmxErrNotEnoughOutputArguments : errorString = "notEnoughOutputArguments" 
 case vlmxErrTooManyOutputArguments : errorString = "tooManyOutputArguments" ; break ; \
 case vlmxErrInvalidOption : errorString = "invalidOption" ; break ; \
 case vlmxErrInconsistentData : errorString = "inconsistentData" ; break ; \
+case vlmxErrExecution: errorString = "execution" ; break ; \
 default : errorString = "undefinedError" ; break ; \
 } \
 \
@@ -70,6 +77,7 @@ case vlmxErrNotEnoughOutputArguments: errorMessage = "Not enough output argument
 case vlmxErrTooManyOutputArguments: errorMessage = "Too many output arguments." ; break ; \
 case vlmxErrInconsistentData: errorMessage = "Inconsistent data." ; break ; \
 case vlmxErrInvalidOption: errorMessage = "Invalid option." ; break ; \
+case vlmxErrExecution: errorMessage = "Execution error." ; break ; \
 default: errorMessage = "Undefined error message." ; \
 } \
 }
@@ -115,7 +123,8 @@ typedef enum _VlmxErrorId {
   vlmxErrNotEnoughOutputArguments,
   vlmxErrTooManyOutputArguments,
   vlmxErrInvalidOption,
-  vlmxErrInconsistentData
+  vlmxErrInconsistentData,
+  vlmxErrExecution
 } VlmxErrorId ;
 
 
