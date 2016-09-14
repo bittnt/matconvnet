@@ -31,6 +31,9 @@ the terms of the BSD license (see the COPYING file).
 #define IF_DOUBLE(x)
 #endif
 
+#define VL_M_PI 3.14159265358979323846
+#define VL_M_PI_F 3.14159265358979323846f
+
 namespace vl {
 
   /// Error codes

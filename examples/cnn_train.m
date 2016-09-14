@@ -30,6 +30,7 @@ opts.learningRate = 0.001 ;
 opts.weightDecay = 0.0005 ;
 opts.momentum = 0.9 ;
 opts.saveMomentum = true ;
+opts.nesterovUpdate = false ;
 opts.randomSeed = 0 ;
 opts.memoryMapFile = fullfile(tempdir, 'matconvnet.bin') ;
 opts.profile = false ;
@@ -357,16 +358,29 @@ for t=1:params.batchSize:numel(subset)
 
   % collect diagnostic statistics
   if strcmp(mode, 'train') && params.plotDiagnostics
-    switchfigure(2) ; clf ;
+    switchFigure(2) ; clf ;
     diagn = [res.stats] ;
     diagnvar = horzcat(diagn.variation) ;
-    barh(diagnvar) ;
+    diagnpow = horzcat(diagn.power) ;
+    subplot(2,2,1) ; barh(diagnvar) ;
     set(gca,'TickLabelInterpreter', 'none', ...
       'YTick', 1:numel(diagnvar), ...
       'YTickLabel',horzcat(diagn.label), ...
       'YDir', 'reverse', ...
       'XScale', 'log', ...
-      'XLim', [1e-5 1]) ;
+      'XLim', [1e-5 1], ...
+      'XTick', 10.^(-5:1)) ;
+    grid on ;
+    subplot(2,2,2) ; barh(sqrt(diagnpow)) ;
+    set(gca,'TickLabelInterpreter', 'none', ...
+      'YTick', 1:numel(diagnpow), ...
+      'YTickLabel',{diagn.powerLabel}, ...
+      'YDir', 'reverse', ...
+      'XScale', 'log', ...
+      'XLim', [1e-5 1e5], ...
+      'XTick', 10.^(-5:5)) ;
+    grid on ;
+    subplot(2,2,3); plot(squeeze(res(end-1).x)) ;
     drawnow ;
   end
 end
@@ -419,21 +433,32 @@ for l=numel(net.layers):-1:1
         thisLR / batchSize, ...
         parDer) ;
     else
-      % standard gradient training
+      % Standard gradient training.
       thisDecay = params.weightDecay * net.layers{l}.weightDecay(j) ;
       thisLR = params.learningRate * net.layers{l}.learningRate(j) ;
 
-      state.momentum{l}{j} = vl_taccum(...
-        params.momentum, ...
-        state.momentum{l}{j}, ...
-        - (1 / batchSize), ...
-        parDer) ;
+      % Normalize gradient and incorporate weight decay.
+      parDer = vl_taccum(1/batchSize, parDer, ...
+                         thisDecay, net.layers{l}.weights{j}) ;
 
+      % Update momentum.
+      state.momentum{l}{j} = vl_taccum(...
+        params.momentum, state.momentum{l}{j}, ...
+        -1, parDer) ;
+
+      % Nesterov update (aka one step ahead).
+      if params.nesterovUpdate
+        delta = vl_taccum(...
+          params.momentum, state.momentum{l}{j}, ...
+          -1, parDer) ;
+      else
+        delta = state.momentum{l}{j} ;
+      end
+
+      % Update parameters.
       net.layers{l}.weights{j} = vl_taccum(...
-        (1 - thisLR * thisDecay / (1 - params.momentum)), ...
-        net.layers{l}.weights{j}, ...
-        thisLR, ...
-        state.momentum{l}{j}) ;
+        1, net.layers{l}.weights{j}, ...
+        thisLR, delta) ;
     end
 
     % if requested, collect some useful stats for debugging
@@ -443,17 +468,20 @@ for l=numel(net.layers):-1:1
       switch net.layers{l}.type
         case {'conv','convt'}
           variation = thisLR * mean(abs(state.momentum{l}{j}(:))) ;
+          power = mean(res(l+1).x(:).^2) ;
           if j == 1 % fiters
-            base = mean(abs(net.layers{l}.weights{j}(:))) ;
+            base = mean(net.layers{l}.weights{j}(:).^2) ;
             label = 'filters' ;
           else % biases
-            base = mean(abs(res(l+1).x(:))) ;
+            base = sqrt(power) ;%mean(abs(res(l+1).x(:))) ;
             label = 'biases' ;
           end
           variation = variation / base ;
           label = sprintf('%s_%s', net.layers{l}.name, label) ;
       end
       res(l).stats.variation(j) = variation ;
+      res(l).stats.power = power ;
+      res(l).stats.powerLabel = net.layers{l}.name ;
       res(l).stats.label{j} = label ;
     end
   end
@@ -546,10 +574,10 @@ end
 % -------------------------------------------------------------------------
 function clearMex()
 % -------------------------------------------------------------------------
-%clear vl_tflow vl_imreadjpeg ;
+%clear vl_tmove vl_imreadjpeg ;
 disp('Clearing mex files') ;
 clear mex ;
-vl_tflow('reset') ;
+clear vl_tmove vl_imreadjpeg ;
 
 % -------------------------------------------------------------------------
 function prepareGPUs(params, cold)
